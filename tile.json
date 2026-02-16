@@ -1,0 +1,20 @@
+{
+  "name": "nicholasjackson/terraform-plugin-framework",
+  "version": "0.1.0",
+  "summary": "Comprehensive documentation and best practices for building Terraform providers with terraform-plugin-framework (v1.17.0). Covers providers, resources, schemas, types, validators, testing, and common pitfalls.",
+  "describes": "pkg:golang/github.com/hashicorp/terraform-plugin-framework@v1.17.0",
+  "docs": "docs/index.md",
+  "ignore": [
+    ".claude/**",
+    ".docs/**"
+  ],
+  "steering": {
+    "rules": [
+      "rules/diagnostics.md",
+      "rules/state-management.md",
+      "rules/schema-design.md",
+      "rules/testing-standards.md",
+      "rules/common-pitfalls.md"
+    ]
+  }
+}
