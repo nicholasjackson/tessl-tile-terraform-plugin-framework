@@ -1,141 +1,283 @@
 # Testing
 
-Test Terraform providers with unit tests (testify/require) and acceptance tests (terraform-plugin-testing).
+Test Terraform providers with acceptance tests (terraform-plugin-testing) for resources and data sources, and unit tests (testify/require) for helper functions.
 
 ## Overview
 
-Provider testing includes:
-- **Unit Tests**: Test individual functions, validators, plan modifiers with testify/require
-- **Acceptance Tests**: Full integration tests using terraform-plugin-testing
-- **Mock-Based Tests**: Use mockery for mocking API clients
+Provider testing follows the standard Terraform provider convention:
 
-**Follow Go best practices:** Use testify/require, avoid table-driven tests, separate positive and negative tests.
+- **Acceptance Tests**: Full lifecycle tests using `resource.Test` from terraform-plugin-testing. This is the primary test type for all resources and data sources.
+- **Unit Tests**: Direct function tests for validators, plan modifiers, provider functions, and utility helpers.
 
-## Unit Testing
+**Key principle:** Resources and data sources are tested with acceptance tests, not unit tests with mocks. This is the established convention across all major Terraform providers.
 
-### Testing with testify/require
+## Acceptance Testing
+
+Acceptance tests use `terraform-plugin-testing` to run real Terraform operations (plan, apply, destroy) against your provider. Every resource and data source must have acceptance tests.
+
+### Provider Factory Setup
 
 ```go
 import (
+    "os"
     "testing"
-    "github.com/stretchr/testify/require"
+
+    "github.com/hashicorp/terraform-plugin-framework/providerserver"
+    "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 )
 
-func TestResourceMetadata(t *testing.T) {
-    resource := NewPetResource()
-
-    req := resource.MetadataRequest{
-        ProviderTypeName: "example",
-    }
-    resp := &resource.MetadataResponse{}
-
-    resource.Metadata(context.Background(), req, resp)
-
-    require.Equal(t, "example_pet", resp.TypeName)
+var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
+    "example": providerserver.NewProtocol6WithError(New("test")()),
 }
 
-func TestResourceMetadata_WrongTypeName(t *testing.T) {
-    resource := NewPetResource()
-
-    req := resource.MetadataRequest{
-        ProviderTypeName: "other",
+func testAccPreCheck(t *testing.T) {
+    // Verify required environment variables are set
+    if v := os.Getenv("EXAMPLE_API_ENDPOINT"); v == "" {
+        t.Fatal("EXAMPLE_API_ENDPOINT must be set for acceptance tests")
     }
-    resp := &resource.MetadataResponse{}
-
-    resource.Metadata(context.Background(), req, resp)
-
-    require.NotEqual(t, "example_pet", resp.TypeName)
-    require.Equal(t, "other_pet", resp.TypeName)
 }
 ```
 
-**Key points:**
-- One test function per scenario (no table-driven tests)
-- Use `require` for assertions (stops test on failure)
-- Separate positive and negative tests
+### Resource Acceptance Tests
 
-### Testing Resources with Mocks
+Each resource should have tests covering: basic create/read, update, import state, and optionally disappears (external deletion).
 
-Use mockery to generate mocks for API clients:
-
-```bash
-# Generate mocks
-mockery --name=APIClient --dir=./internal/client --output=./internal/client/mocks
-```
+#### Create and Read
 
 ```go
-func TestPetResource_Create(t *testing.T) {
-    mockClient := client.NewMockAPIClient(t)
-    mockClient.On("CreatePet", mock.Anything, &client.CreatePetRequest{
-        Name:    "Fluffy",
-        Species: "cat",
-    }).Return(&client.Pet{
-        ID:      "pet-123",
-        Name:    "Fluffy",
-        Species: "cat",
-        Age:     3,
-    }, nil)
-
-    resource := &PetResource{client: mockClient}
-
-    // Create plan with test data
-    plan := PetResourceModel{
-        Name:    types.StringValue("Fluffy"),
-        Species: types.StringValue("cat"),
-    }
-
-    req := resource.CreateRequest{
-        Plan: tfsdk.Plan{
-            Raw:    planRawValue,
-            Schema: resourceSchema,
+func TestAccPetResource_basic(t *testing.T) {
+    resource.Test(t, resource.TestCase{
+        PreCheck:                 func() { testAccPreCheck(t) },
+        ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+        CheckDestroy:             testAccCheckPetDestroy,
+        Steps: []resource.TestStep{
+            {
+                Config: testAccPetResourceConfig("Fluffy", "cat"),
+                Check: resource.ComposeAggregateTestCheckFunc(
+                    resource.TestCheckResourceAttr("example_pet.test", "name", "Fluffy"),
+                    resource.TestCheckResourceAttr("example_pet.test", "species", "cat"),
+                    resource.TestCheckResourceAttrSet("example_pet.test", "id"),
+                    resource.TestCheckResourceAttrSet("example_pet.test", "created_at"),
+                ),
+            },
         },
-    }
-    resp := &resource.CreateResponse{
-        State: tfsdk.State{
-            Schema: resourceSchema,
-        },
-    }
-
-    resource.Create(context.Background(), req, resp)
-
-    require.False(t, resp.Diagnostics.HasError())
-    mockClient.AssertExpectations(t)
-
-    var state PetResourceModel
-    resp.State.Get(context.Background(), &state)
-    require.Equal(t, "pet-123", state.ID.ValueString())
-    require.Equal(t, "Fluffy", state.Name.ValueString())
-}
-
-func TestPetResource_Create_APIError(t *testing.T) {
-    mockClient := client.NewMockAPIClient(t)
-    mockClient.On("CreatePet", mock.Anything, mock.Anything).Return(nil, errors.New("API error"))
-
-    resource := &PetResource{client: mockClient}
-
-    req := resource.CreateRequest{
-        Plan: tfsdk.Plan{
-            Raw:    planRawValue,
-            Schema: resourceSchema,
-        },
-    }
-    resp := &resource.CreateResponse{
-        State: tfsdk.State{
-            Schema: resourceSchema,
-        },
-    }
-
-    resource.Create(context.Background(), req, resp)
-
-    require.True(t, resp.Diagnostics.HasError())
-    require.Contains(t, resp.Diagnostics.Errors()[0].Detail(), "API error")
+    })
 }
 ```
+
+#### Update
+
+```go
+func TestAccPetResource_update(t *testing.T) {
+    resource.Test(t, resource.TestCase{
+        PreCheck:                 func() { testAccPreCheck(t) },
+        ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+        CheckDestroy:             testAccCheckPetDestroy,
+        Steps: []resource.TestStep{
+            {
+                Config: testAccPetResourceConfig("Fluffy", "cat"),
+                Check: resource.ComposeAggregateTestCheckFunc(
+                    resource.TestCheckResourceAttr("example_pet.test", "name", "Fluffy"),
+                ),
+            },
+            {
+                Config: testAccPetResourceConfig("Fluffy Updated", "cat"),
+                Check: resource.ComposeAggregateTestCheckFunc(
+                    resource.TestCheckResourceAttr("example_pet.test", "name", "Fluffy Updated"),
+                ),
+            },
+        },
+    })
+}
+```
+
+#### Import State
+
+```go
+func TestAccPetResource_import(t *testing.T) {
+    resource.Test(t, resource.TestCase{
+        PreCheck:                 func() { testAccPreCheck(t) },
+        ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+        CheckDestroy:             testAccCheckPetDestroy,
+        Steps: []resource.TestStep{
+            {
+                Config: testAccPetResourceConfig("Fluffy", "cat"),
+            },
+            {
+                ResourceName:      "example_pet.test",
+                ImportState:       true,
+                ImportStateVerify: true,
+                // Ignore fields that can't be imported
+                ImportStateVerifyIgnore: []string{"last_updated"},
+            },
+        },
+    })
+}
+```
+
+#### ExpectError
+
+```go
+func TestAccPetResource_invalidSpecies(t *testing.T) {
+    resource.Test(t, resource.TestCase{
+        PreCheck:                 func() { testAccPreCheck(t) },
+        ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+        Steps: []resource.TestStep{
+            {
+                Config:      testAccPetResourceConfig("Fluffy", "invalid"),
+                ExpectError: regexp.MustCompile(`Invalid species`),
+            },
+        },
+    })
+}
+```
+
+### Data Source Acceptance Tests
+
+Data source tests typically create a resource first, then read it via the data source and verify the attributes match.
+
+```go
+func TestAccPetDataSource_basic(t *testing.T) {
+    resource.Test(t, resource.TestCase{
+        PreCheck:                 func() { testAccPreCheck(t) },
+        ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+        Steps: []resource.TestStep{
+            {
+                Config: testAccPetDataSourceConfig("Fluffy"),
+                Check: resource.ComposeAggregateTestCheckFunc(
+                    resource.TestCheckResourceAttr("data.example_pet.test", "name", "Fluffy"),
+                    resource.TestCheckResourceAttr("data.example_pet.test", "species", "cat"),
+                ),
+            },
+        },
+    })
+}
+
+func testAccPetDataSourceConfig(name string) string {
+    return fmt.Sprintf(`
+data "example_pet" "test" {
+  name = %[1]q
+}
+`, name)
+}
+```
+
+When a data source depends on a resource existing first:
+
+```go
+func testAccPetDataSourceConfig_withResource(name, species string) string {
+    return fmt.Sprintf(`
+resource "example_pet" "setup" {
+  name    = %[1]q
+  species = %[2]q
+}
+
+data "example_pet" "test" {
+  id = example_pet.setup.id
+}
+`, name, species)
+}
+```
+
+### HCL Config Helpers
+
+Config helper functions generate Terraform HCL configurations for tests:
+
+```go
+func testAccPetResourceConfig(name, species string) string {
+    return fmt.Sprintf(`
+resource "example_pet" "test" {
+  name    = %[1]q
+  species = %[2]q
+}
+`, name, species)
+}
+```
+
+For complex configurations with provider settings:
+
+```go
+func testAccProviderConfig() string {
+    return `
+provider "example" {
+  endpoint = "https://api.example.com"
+}
+`
+}
+
+func testAccPetResourceConfig_full(name, species string, age int) string {
+    return testAccProviderConfig() + fmt.Sprintf(`
+resource "example_pet" "test" {
+  name    = %[1]q
+  species = %[2]q
+  age     = %[3]d
+}
+`, name, species, age)
+}
+```
+
+### CheckDestroy Functions
+
+Verify resources are cleaned up after test completion:
+
+```go
+func testAccCheckPetDestroy(s *terraform.State) error {
+    for _, rs := range s.RootModule().Resources {
+        if rs.Type != "example_pet" {
+            continue
+        }
+
+        _, err := apiClient.GetPet(context.Background(), rs.Primary.ID)
+        if err == nil {
+            return fmt.Errorf("pet %s still exists", rs.Primary.ID)
+        }
+    }
+    return nil
+}
+```
+
+### Custom Check Functions
+
+```go
+func testAccCheckPetExists(resourceName string) resource.TestCheckFunc {
+    return func(s *terraform.State) error {
+        rs, ok := s.RootModule().Resources[resourceName]
+        if !ok {
+            return fmt.Errorf("not found: %s", resourceName)
+        }
+
+        if rs.Primary.ID == "" {
+            return fmt.Errorf("pet ID is not set")
+        }
+
+        _, err := apiClient.GetPet(context.Background(), rs.Primary.ID)
+        return err
+    }
+}
+```
+
+### Acceptance Test Naming Convention
+
+```go
+// Format: TestAcc<Resource>_<scenario>
+func TestAccPetResource_basic(t *testing.T)
+func TestAccPetResource_update(t *testing.T)
+func TestAccPetResource_import(t *testing.T)
+func TestAccPetResource_disappears(t *testing.T)
+func TestAccPetResource_invalidSpecies(t *testing.T)
+
+func TestAccPetDataSource_basic(t *testing.T)
+func TestAccPetDataSource_byName(t *testing.T)
+```
+
+## Unit Testing
+
+Unit tests are appropriate for helper functions that don't need the full Terraform lifecycle. Use testify/require for assertions.
 
 ### Testing Validators
 
 ```go
-func TestEmailValidator(t *testing.T) {
+func TestEmailValidator_Valid(t *testing.T) {
     validator := validators.Email()
 
     req := validator.StringRequest{
@@ -201,7 +343,7 @@ func TestRequiresReplaceModifier(t *testing.T) {
 }
 ```
 
-### Testing Functions
+### Testing Provider Functions
 
 ```go
 func TestBase64EncodeFunction(t *testing.T) {
@@ -247,169 +389,9 @@ func TestBase64EncodeFunction_EmptyInput(t *testing.T) {
 }
 ```
 
-## Acceptance Testing
-
-Acceptance tests use `terraform-plugin-testing` to run real Terraform operations against your provider.
-
-### Setup
-
-```go
-import (
-    "testing"
-    "github.com/hashicorp/terraform-plugin-testing/helper/resource"
-)
-
-func TestAccPetResource(t *testing.T) {
-    resource.Test(t, resource.TestCase{
-        PreCheck:                 func() { testAccPreCheck(t) },
-        ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-        Steps: []resource.TestStep{
-            // Create and Read testing
-            {
-                Config: testAccPetResourceConfig("Fluffy", "cat"),
-                Check: resource.ComposeAggregateTestCheckFunc(
-                    resource.TestCheckResourceAttr("example_pet.test", "name", "Fluffy"),
-                    resource.TestCheckResourceAttr("example_pet.test", "species", "cat"),
-                    resource.TestCheckResourceAttrSet("example_pet.test", "id"),
-                ),
-            },
-            // ImportState testing
-            {
-                ResourceName:      "example_pet.test",
-                ImportState:       true,
-                ImportStateVerify: true,
-            },
-            // Update and Read testing
-            {
-                Config: testAccPetResourceConfig("Fluffy Updated", "cat"),
-                Check: resource.ComposeAggregateTestCheckFunc(
-                    resource.TestCheckResourceAttr("example_pet.test", "name", "Fluffy Updated"),
-                ),
-            },
-            // Delete testing automatically occurs at end
-        },
-    })
-}
-
-func testAccPetResourceConfig(name, species string) string {
-    return fmt.Sprintf(`
-resource "example_pet" "test" {
-  name    = %[1]q
-  species = %[2]q
-}
-`, name, species)
-}
-```
-
-### Provider Factories
-
-```go
-var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
-    "example": providerserver.NewProtocol6WithError(New("test")()),
-}
-
-func testAccPreCheck(t *testing.T) {
-    // Check required environment variables
-    if v := os.Getenv("EXAMPLE_API_KEY"); v == "" {
-        t.Fatal("EXAMPLE_API_KEY must be set for acceptance tests")
-    }
-}
-```
-
-### Acceptance Test Patterns
-
-#### Create and Read
-
-```go
-{
-    Config: testAccPetResourceConfig("Fluffy", "cat"),
-    Check: resource.ComposeAggregateTestCheckFunc(
-        resource.TestCheckResourceAttr("example_pet.test", "name", "Fluffy"),
-        resource.TestCheckResourceAttr("example_pet.test", "species", "cat"),
-        resource.TestCheckResourceAttrSet("example_pet.test", "id"),
-        resource.TestCheckResourceAttrSet("example_pet.test", "created_at"),
-    ),
-},
-```
-
-#### Update
-
-```go
-{
-    Config: testAccPetResourceConfig("Fluffy Updated", "cat"),
-    Check: resource.ComposeAggregateTestCheckFunc(
-        resource.TestCheckResourceAttr("example_pet.test", "name", "Fluffy Updated"),
-        // ID should not change on update
-        resource.TestCheckResourceAttrPair(
-            "example_pet.test", "id",
-            "example_pet.test", "id",
-        ),
-    ),
-},
-```
-
-#### Import
-
-```go
-{
-    ResourceName:      "example_pet.test",
-    ImportState:       true,
-    ImportStateVerify: true,
-    // Ignore computed fields that can't be imported
-    ImportStateVerifyIgnore: []string{"created_at"},
-},
-```
-
-#### ExpectError
-
-```go
-{
-    Config: testAccPetResourceConfig_Invalid(),
-    ExpectError: regexp.MustCompile(`Invalid species`),
-},
-```
-
-#### Destroy
-
-```go
-{
-    Config: testAccPetResourceConfig("Fluffy", "cat"),
-},
-{
-    Config:  testAccEmptyConfig(),
-    Destroy: true,
-},
-```
-
-### Data Source Acceptance Tests
-
-```go
-func TestAccPetDataSource(t *testing.T) {
-    resource.Test(t, resource.TestCase{
-        PreCheck:                 func() { testAccPreCheck(t) },
-        ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-        Steps: []resource.TestStep{
-            {
-                Config: testAccPetDataSourceConfig("Fluffy"),
-                Check: resource.ComposeAggregateTestCheckFunc(
-                    resource.TestCheckResourceAttr("data.example_pet.test", "name", "Fluffy"),
-                    resource.TestCheckResourceAttr("data.example_pet.test", "species", "cat"),
-                ),
-            },
-        },
-    })
-}
-
-func testAccPetDataSourceConfig(name string) string {
-    return fmt.Sprintf(`
-data "example_pet" "test" {
-  name = %[1]q
-}
-`, name)
-}
-```
-
 ### Function Acceptance Tests
+
+Provider functions can also be tested via acceptance tests:
 
 ```go
 func TestAccBase64EncodeFunction(t *testing.T) {
@@ -418,7 +400,11 @@ func TestAccBase64EncodeFunction(t *testing.T) {
         ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
         Steps: []resource.TestStep{
             {
-                Config: testAccBase64EncodeFunctionConfig(),
+                Config: `
+output "encoded" {
+  value = provider::example::base64_encode("hello")
+}
+`,
                 Check: resource.ComposeAggregateTestCheckFunc(
                     resource.TestCheckOutput("encoded", "aGVsbG8="),
                 ),
@@ -426,14 +412,33 @@ func TestAccBase64EncodeFunction(t *testing.T) {
         },
     })
 }
+```
 
-func testAccBase64EncodeFunctionConfig() string {
-    return `
-output "encoded" {
-  value = provider::example::base64_encode("hello")
-}
-`
-}
+## Test Organization
+
+```
+provider_test.go          # Provider factory setup, precheck, shared helpers
+resource_pet_test.go      # Pet resource acceptance tests
+datasource_pet_test.go    # Pet data source acceptance tests
+validators_test.go        # Validator unit tests
+planmodifiers_test.go     # Plan modifier unit tests
+function_base64_test.go   # Function unit tests
+```
+
+## Running Tests
+
+```bash
+# Unit tests only (no TF_ACC)
+go test ./... -count=1
+
+# Acceptance tests
+TF_ACC=1 go test ./... -v
+
+# Specific acceptance test
+TF_ACC=1 go test -run TestAccPetResource ./... -v
+
+# With coverage
+go test -cover ./...
 ```
 
 ## Testing Best Practices
@@ -442,32 +447,16 @@ output "encoded" {
 
 ```go
 // GOOD: Separate test functions
-func TestResourceCreate(t *testing.T) {
+func TestAccPetResource_basic(t *testing.T) {
     // Test successful creation
 }
 
-func TestResourceCreate_APIError(t *testing.T) {
-    // Test API error handling
-}
-
-func TestResourceCreate_InvalidInput(t *testing.T) {
+func TestAccPetResource_invalidSpecies(t *testing.T) {
     // Test validation error
-}
-
-// BAD: Combined in table-driven test (avoid this)
-func TestResourceCreate(t *testing.T) {
-    tests := []struct {
-        name    string
-        input   string
-        wantErr bool
-    }{
-        // Don't do this
-    }
-    // ...
 }
 ```
 
-### Use require for Assertions
+### Use require for Unit Test Assertions
 
 ```go
 // GOOD: Use require (stops on failure)
@@ -475,133 +464,23 @@ require.Equal(t, expected, actual)
 require.NoError(t, err)
 require.True(t, condition)
 
-// BAD: Use assert (continues on failure)
-assert.Equal(t, expected, actual)  // Avoid
+// BAD: Use assert (continues on failure, may cause confusing cascading errors)
+assert.Equal(t, expected, actual)
 ```
 
 ### Test Coverage
 
-Ensure tests cover:
-- All CRUD operations
-- Import functionality
-- Validation logic
-- Error handling
-- Edge cases (null, unknown, empty values)
-- Plan modifiers behavior
-- Cross-attribute validation
+Acceptance tests should cover:
+- All CRUD operations (Create, Read, Update, Delete)
+- Import state functionality
+- Validation logic (ExpectError)
+- Attribute-specific updates
 
-### Test Organization
-
-```
-provider_test.go         # Provider tests
-resource_pet_test.go     # Pet resource tests
-datasource_pet_test.go   # Pet data source tests
-validators_test.go       # Validator tests
-planmodifiers_test.go    # Plan modifier tests
-function_base64_test.go  # Function tests
-```
-
-## Mocking Patterns
-
-### API Client Mock
-
-```go
-type MockAPIClient struct {
-    mock.Mock
-}
-
-func (m *MockAPIClient) CreatePet(ctx context.Context, req *CreatePetRequest) (*Pet, error) {
-    args := m.Called(ctx, req)
-    if args.Get(0) == nil {
-        return nil, args.Error(1)
-    }
-    return args.Get(0).(*Pet), args.Error(1)
-}
-
-// Use in tests
-mockClient := &MockAPIClient{}
-mockClient.On("CreatePet", mock.Anything, mock.Anything).Return(&Pet{
-    ID:   "pet-123",
-    Name: "Fluffy",
-}, nil)
-```
-
-### Mock Setup Helpers
-
-```go
-func setupMockClient(t *testing.T) *MockAPIClient {
-    mockClient := &MockAPIClient{}
-    t.Cleanup(func() {
-        mockClient.AssertExpectations(t)
-    })
-    return mockClient
-}
-
-func TestResource(t *testing.T) {
-    mockClient := setupMockClient(t)
-    mockClient.On("CreatePet", mock.Anything, mock.Anything).Return(&Pet{}, nil)
-
-    // Test code...
-    // AssertExpectations called automatically via t.Cleanup
-}
-```
-
-## Running Tests
-
-```bash
-# Run unit tests
-go test ./...
-
-# Run acceptance tests
-TF_ACC=1 go test ./... -v
-
-# Run specific test
-go test -run TestAccPetResource ./...
-
-# Run with coverage
-go test -cover ./...
-
-# Verbose output
-go test -v ./...
-```
-
-## Test Helpers
-
-### Create Test Configuration
-
-```go
-func testAccResourceConfig(attrs map[string]string) string {
-    config := `
-resource "example_pet" "test" {
-`
-    for k, v := range attrs {
-        config += fmt.Sprintf("  %s = %q\n", k, v)
-    }
-    config += "}\n"
-    return config
-}
-```
-
-### Check Functions
-
-```go
-func testAccCheckPetExists(resourceName string) resource.TestCheckFunc {
-    return func(s *terraform.State) error {
-        rs, ok := s.RootModule().Resources[resourceName]
-        if !ok {
-            return fmt.Errorf("Not found: %s", resourceName)
-        }
-
-        if rs.Primary.ID == "" {
-            return fmt.Errorf("Pet ID is not set")
-        }
-
-        // Verify pet exists via API
-        _, err := testAccProvider.client.GetPet(context.Background(), rs.Primary.ID)
-        return err
-    }
-}
-```
+Unit tests should cover:
+- Custom validators (valid and invalid inputs)
+- Custom plan modifiers
+- Provider functions
+- Utility/helper functions
 
 ## External References
 

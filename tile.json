@@ -9,12 +9,23 @@
     ".docs/**"
   ],
   "steering": {
-    "rules": [
-      "rules/diagnostics.md",
-      "rules/state-management.md",
-      "rules/schema-design.md",
-      "rules/testing-standards.md",
-      "rules/common-pitfalls.md"
-    ]
+    "diagnostics": {
+      "rules": "rules/diagnostics.md"
+    },
+    "state-management": {
+      "rules": "rules/state-management.md"
+    },
+    "schema-design": {
+      "rules": "rules/schema-design.md"
+    },
+    "testing-standards": {
+      "rules": "rules/testing-standards.md"
+    },
+    "common-pitfalls": {
+      "rules": "rules/common-pitfalls.md"
+    },
+    "development-workflow": {
+      "rules": "rules/development-workflow.md"
+    }
   }
 }

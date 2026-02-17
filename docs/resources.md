@@ -579,38 +579,43 @@ func (r *PetResource) Create(ctx context.Context, req resource.CreateRequest, re
 
 ## Testing Resources
 
+Test resources with acceptance tests using `resource.Test` from `terraform-plugin-testing`:
+
 ```go
-func TestPetResource_Create(t *testing.T) {
-    mockClient := &MockAPIClient{}
-    mockClient.On("CreatePet", mock.Anything, mock.Anything).Return(&Pet{
-        ID:      "pet-123",
-        Name:    "Fluffy",
-        Species: "cat",
-        Age:     3,
-    }, nil)
+func TestAccPetResource_basic(t *testing.T) {
+    resource.Test(t, resource.TestCase{
+        PreCheck:                 func() { testAccPreCheck(t) },
+        ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+        CheckDestroy:             testAccCheckPetDestroy,
+        Steps: []resource.TestStep{
+            {
+                Config: testAccPetResourceConfig("Fluffy", "cat"),
+                Check: resource.ComposeAggregateTestCheckFunc(
+                    resource.TestCheckResourceAttr("example_pet.test", "name", "Fluffy"),
+                    resource.TestCheckResourceAttr("example_pet.test", "species", "cat"),
+                    resource.TestCheckResourceAttrSet("example_pet.test", "id"),
+                ),
+            },
+            {
+                ResourceName:      "example_pet.test",
+                ImportState:       true,
+                ImportStateVerify: true,
+            },
+        },
+    })
+}
 
-    resource := &PetResource{client: mockClient}
-
-    req := resource.CreateRequest{
-        Plan: /* plan with Fluffy data */,
-    }
-    resp := &resource.CreateResponse{
-        State: tfsdk.State{},
-    }
-
-    resource.Create(context.Background(), req, resp)
-
-    require.False(t, resp.Diagnostics.HasError())
-    mockClient.AssertExpectations(t)
-
-    var state PetResourceModel
-    resp.State.Get(context.Background(), &state)
-    require.Equal(t, "pet-123", state.ID.ValueString())
-    require.Equal(t, "Fluffy", state.Name.ValueString())
+func testAccPetResourceConfig(name, species string) string {
+    return fmt.Sprintf(`
+resource "example_pet" "test" {
+  name    = %[1]q
+  species = %[2]q
+}
+`, name, species)
 }
 ```
 
-See [Testing](testing.md) for comprehensive testing patterns.
+See [Testing](testing.md) for comprehensive testing patterns including update, destroy, and data source tests.
 
 ## Common Patterns
 
