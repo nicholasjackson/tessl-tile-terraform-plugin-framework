@@ -1,0 +1,46 @@
+{
+  "type": "weighted_checklist",
+  "context": "Evaluates whether the agent correctly adds validators and plan modifiers to a Terraform resource schema, using terraform-plugin-framework-validators and plan modifier packages.",
+  "checklist": [
+    {
+      "name": "Status enum validator",
+      "description": "status attribute is Optional String with a stringvalidator.OneOf validator accepting only 'active', 'inactive', 'archived'",
+      "max_score": 15
+    },
+    {
+      "name": "Priority range validator",
+      "description": "priority attribute is Optional Int64 with an int64validator.Between or AtLeast+AtMost validator constraining values to 1-10",
+      "max_score": 15
+    },
+    {
+      "name": "Created_at UseStateForUnknown",
+      "description": "created_at attribute is Computed String with stringplanmodifier.UseStateForUnknown() plan modifier so it is preserved across updates",
+      "max_score": 15
+    },
+    {
+      "name": "Updated_at without UseStateForUnknown",
+      "description": "updated_at attribute is Computed String and does NOT have UseStateForUnknown. It should change on every update",
+      "max_score": 15
+    },
+    {
+      "name": "Slug RequiresReplace",
+      "description": "slug attribute is Required String with stringplanmodifier.RequiresReplace() plan modifier so changing it forces resource replacement",
+      "max_score": 15
+    },
+    {
+      "name": "ID UseStateForUnknown",
+      "description": "The existing id attribute has UseStateForUnknown plan modifier since it is a stable computed value",
+      "max_score": 10
+    },
+    {
+      "name": "Correct imports",
+      "description": "Code imports terraform-plugin-framework-validators packages (stringvalidator, int64validator) and plan modifier packages (stringplanmodifier, int64planmodifier)",
+      "max_score": 5
+    },
+    {
+      "name": "All attributes have descriptions",
+      "description": "Every attribute in the schema has a Description string",
+      "max_score": 10
+    }
+  ]
+}

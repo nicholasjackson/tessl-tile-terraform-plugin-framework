@@ -1,0 +1,51 @@
+{
+  "type": "weighted_checklist",
+  "context": "Evaluates whether the agent correctly implements a Terraform data source and adds import state support to an existing resource, with proper diagnostics and acceptance tests.",
+  "checklist": [
+    {
+      "name": "Data source schema",
+      "description": "Data source has id as Required String and name as Computed String. Both attributes have Description strings",
+      "max_score": 10
+    },
+    {
+      "name": "Data source Read method",
+      "description": "Data source Read method gets config, looks up the item, handles not-found by adding an error diagnostic (not returning silently), and sets complete state on success",
+      "max_score": 15
+    },
+    {
+      "name": "Data source diagnostics",
+      "description": "Config.Get and State.Set calls in the data source are followed by resp.Diagnostics.HasError() checks with early returns",
+      "max_score": 10
+    },
+    {
+      "name": "Import state interface",
+      "description": "The example_resource implements the ResourceWithImportState interface by adding an ImportState method",
+      "max_score": 10
+    },
+    {
+      "name": "ImportStatePassthroughID",
+      "description": "The ImportState method uses resource.ImportStatePassthroughID with the correct attribute path for id",
+      "max_score": 15
+    },
+    {
+      "name": "Data source acceptance test",
+      "description": "Test uses resource.Test with a TestStep that creates a resource as a dependency, then reads it via the data source using a reference to the resource's id attribute",
+      "max_score": 15
+    },
+    {
+      "name": "Import test step",
+      "description": "Resource test includes a TestStep with ImportState: true and ImportStateVerify: true that verifies the resource can be imported by ID",
+      "max_score": 15
+    },
+    {
+      "name": "Provider registration",
+      "description": "Data source is registered in provider.go's DataSources() method",
+      "max_score": 5
+    },
+    {
+      "name": "Test uses ProtoV6ProviderFactories",
+      "description": "Tests use ProtoV6ProviderFactories (not ProviderFactories) appropriate for terraform-plugin-framework",
+      "max_score": 5
+    }
+  ]
+}

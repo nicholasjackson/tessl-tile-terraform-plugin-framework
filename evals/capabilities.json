@@ -1,0 +1,22 @@
+[
+  {
+    "name": "schema-validators-plan-modifiers",
+    "description": "Add validators and plan modifiers to a Terraform resource schema"
+  },
+  {
+    "name": "resource-crud",
+    "description": "Add a new Terraform resource with full CRUD operations, API client, and acceptance tests"
+  },
+  {
+    "name": "data-source-import-state",
+    "description": "Add a data source and import state support to an existing Terraform resource"
+  },
+  {
+    "name": "provider-configuration",
+    "description": "Add provider-level configuration with environment variable fallback and wire provider data to resources"
+  },
+{
+    "name": "provider-function",
+    "description": "Add a provider-defined function with parameter validation, error handling, and unit tests"
+  }
+]

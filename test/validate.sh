@@ -7,6 +7,7 @@ TEST_DIR="$TILE_DIR/test-output/terraform-provider-petstore"
 CONTAINER_NAME="petstore-tile-test"
 PETSTORE_PORT=18080
 PETSTORE_URL="http://localhost:${PETSTORE_PORT}/api"
+SCAFFOLD_COMMIT="3f9b7d20f49724d61ffaa28f5812c347b6a3e4a1"
 
 echo "=== Tile Validation ==="
 echo "Tile:   $TILE_DIR"
@@ -43,12 +44,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Download HashiCorp scaffold template
-echo "=== Downloading scaffold template ==="
+# Clone HashiCorp scaffold at pinned commit
+echo "=== Cloning scaffold template (commit ${SCAFFOLD_COMMIT:0:8}) ==="
 mkdir -p "$TILE_DIR/test-output"
-curl -sL https://github.com/hashicorp/terraform-provider-scaffolding-framework/archive/refs/heads/main.tar.gz | \
-  tar xz -C "$TILE_DIR/test-output/"
-mv "$TILE_DIR/test-output/terraform-provider-scaffolding-framework-main" "$TEST_DIR"
+git clone https://github.com/hashicorp/terraform-provider-scaffolding-framework.git "$TEST_DIR"
+cd "$TEST_DIR"
+git checkout "$SCAFFOLD_COMMIT"
 
 # Resolve Go dependencies so tessl can detect them
 echo "=== Resolving Go dependencies ==="
@@ -81,7 +82,7 @@ claude -p "$PROMPT" \
   | python3 -u "$SCRIPT_DIR/stream_output.py"
 
 echo ""
-echo "=== Validating output ==="
+echo "=== Validating Phase 1 (CRUD provider) ==="
 
 echo "--- go build ---"
 go build ./...
@@ -93,6 +94,38 @@ echo "PASS"
 
 echo "--- go test ---"
 TF_ACC=1 go test ./... -count=1 -timeout 180s
+echo "PASS"
+
+echo ""
+echo "=== Phase 1 complete ==="
+
+# Phase 2: Add ephemeral resource to the existing provider
+LOGFILE2="$TILE_DIR/test-output/claude-output-ephemeral.jsonl"
+
+echo ""
+echo "=== Running Claude (Phase 2: Ephemeral Resource) ==="
+echo "Log: $LOGFILE2"
+PROMPT2="$(cat "$SCRIPT_DIR/prompt-ephemeral.md")"
+claude -p "$PROMPT2" \
+  --allowedTools "Read,Edit,Write,Bash,Glob,Grep" \
+  --output-format stream-json \
+  --verbose \
+  | tee "$LOGFILE2" \
+  | python3 -u "$SCRIPT_DIR/stream_output.py"
+
+echo ""
+echo "=== Validating Phase 2 (Ephemeral Resource) ==="
+
+echo "--- go build ---"
+go build ./...
+echo "PASS"
+
+echo "--- go vet ---"
+go vet ./...
+echo "PASS"
+
+echo "--- go test ---"
+go test ./... -count=1 -timeout 180s
 echo "PASS"
 
 echo ""

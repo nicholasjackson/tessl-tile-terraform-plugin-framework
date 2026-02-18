@@ -1,0 +1,46 @@
+{
+  "type": "weighted_checklist",
+  "context": "Evaluates whether the agent correctly implements provider-level configuration with environment variable fallback and wires provider data to resources.",
+  "checklist": [
+    {
+      "name": "Provider schema attributes",
+      "description": "Provider schema has endpoint (Optional String) and api_key (Optional Sensitive String) attributes with Description strings",
+      "max_score": 10
+    },
+    {
+      "name": "Config.Get with diagnostics",
+      "description": "Configure method reads config with req.Config.Get and checks resp.Diagnostics.HasError() with early return",
+      "max_score": 10
+    },
+    {
+      "name": "Endpoint env var fallback",
+      "description": "If endpoint is null or unknown in config, the code reads the EXAMPLE_ENDPOINT environment variable as a fallback using os.Getenv or similar",
+      "max_score": 15
+    },
+    {
+      "name": "API key env var fallback",
+      "description": "If api_key is null or unknown in config, the code reads the EXAMPLE_API_KEY environment variable as a fallback",
+      "max_score": 10
+    },
+    {
+      "name": "Missing endpoint error diagnostic",
+      "description": "If endpoint is still empty after env var fallback, an error diagnostic is added to resp.Diagnostics with a meaningful summary and detail",
+      "max_score": 15
+    },
+    {
+      "name": "Provider data passed via response",
+      "description": "Configure method sets resp.DataSourceData and resp.ResourceData so resources and data sources can access the configured client or config",
+      "max_score": 15
+    },
+    {
+      "name": "Resource Configure method",
+      "description": "example_resource has a Configure method that retrieves provider data from req.ProviderData, handles nil (early return), and type-asserts with error diagnostic on mismatch",
+      "max_score": 15
+    },
+    {
+      "name": "Acceptance test",
+      "description": "An acceptance test exists that configures the provider (via env vars or HCL) and runs at least one TestStep with a basic apply. Uses ProtoV6ProviderFactories",
+      "max_score": 10
+    }
+  ]
+}

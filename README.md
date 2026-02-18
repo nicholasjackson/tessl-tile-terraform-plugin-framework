@@ -96,40 +96,97 @@ This is a **documentation tile** with **steering rules**:
 
 When you install this tile, agents (Claude Code, Cursor, etc.) gain context about terraform-plugin-framework without requiring you to explain basic concepts.
 
-## Testing This Tile Locally
+## Local Validation
 
-Before publishing, test the tile locally:
+The `test/` directory contains a two-phase validation script that uses Claude to build a provider from scratch, then validates the output compiles, passes vet, and passes acceptance tests.
 
-1. **Install locally**:
-   ```bash
-   cd /path/to/tessl-tile-terraform-plugin-framework
-   tessl install .
-   ```
+### Prerequisites
 
-2. **Create test provider**:
-   Create a sample Terraform provider project to validate tile effectiveness:
-   ```bash
-   mkdir test-provider
-   cd test-provider
-   go mod init github.com/example/terraform-provider-test
-   ```
+- Docker (for the local Petstore API)
+- Claude CLI (`claude`)
+- Tessl CLI (`tessl`)
+- Go 1.21+
 
-3. **Test with agent**:
-   Use Claude Code or Cursor to build a simple resource:
-   ```
-   Create a simple Terraform resource for managing a "Pet" with name and species attributes.
-   Use terraform-plugin-framework.
-   ```
+### Running
 
-4. **Verify**:
-   - Agent references tile documentation correctly
-   - Code follows patterns from docs
-   - Agent applies rules (checks diagnostics, uses UseStateForUnknown, etc.)
-   - Generated code compiles and passes `go vet`
+```bash
+bash test/validate.sh
+```
 
-5. **Iterate**:
-   - Update tile documentation based on findings
-   - Test again until tile provides clear, accurate guidance
+This will:
+
+1. Start a local Swagger Petstore API in Docker (port 18080)
+2. Clone the [HashiCorp scaffold](https://github.com/hashicorp/terraform-provider-scaffolding-framework) at a pinned commit
+3. Install the tile under test from the local directory
+4. **Phase 1**: Run Claude to build CRUD resources for the Petstore API
+5. Validate: `go build`, `go vet`, `TF_ACC=1 go test`
+6. **Phase 2**: Run Claude to add an ephemeral resource to the existing provider
+7. Validate: `go build`, `go vet`, `go test`
+
+Output is written to `test-output/` (gitignored).
+
+### Test Files
+
+| File | Purpose |
+|------|---------|
+| `test/validate.sh` | Main validation runner |
+| `test/prompt.md` | Phase 1 prompt (CRUD provider from Petstore API) |
+| `test/prompt-ephemeral.md` | Phase 2 prompt (add ephemeral resource) |
+| `test/stream_output.py` | Streams Claude's JSON output to terminal |
+
+## Tessl Evals
+
+The `evals/` directory contains evaluation scenarios that run on Tessl's cloud infrastructure. Each scenario tests a specific terraform-plugin-framework capability.
+
+### Scenarios
+
+| Scenario | Capability | What It Tests |
+|----------|-----------|---------------|
+| 1 | `schema-validators-plan-modifiers` | OneOf/Between validators, UseStateForUnknown/RequiresReplace plan modifiers |
+| 2 | `resource-crud` | New resource with full CRUD, API client, acceptance tests |
+| 3 | `data-source-import-state` | Data source Read method, ImportStatePassthroughID |
+| 4 | `provider-configuration` | Provider schema with env var fallback, ProviderData wiring |
+| 5 | `provider-function` | Provider-defined function with Definition/Run, error handling, unit tests |
+
+All scenarios start from the official [HashiCorp scaffold](https://github.com/hashicorp/terraform-provider-scaffolding-framework) pinned at commit `3f9b7d20`.
+
+### Running Evals
+
+```bash
+# Run all scenarios (baseline + with-tile)
+tessl eval run
+
+# View results
+tessl eval view --last
+
+# Force re-run (ignore cached results)
+tessl eval run --force
+
+# Retry a failed run
+tessl eval retry <run-id>
+```
+
+Each scenario runs twice: a **baseline** (without the tile) and **with-context** (with the tile). Scores are compared to measure the tile's impact.
+
+### Eval Structure
+
+Each scenario directory contains:
+
+```
+evals/scenario-N/
+  task.md          # The prompt given to the agent
+  criteria.json    # Weighted checklist (scores sum to 100)
+  capability.text  # Capability tag for grouping
+```
+
+### Adding a New Scenario
+
+1. Create `evals/scenario-N/` with `task.md`, `criteria.json`, and `capability.text`
+2. Ensure `criteria.json` scores sum to 100
+3. Add the capability to `evals/capabilities.json`
+4. Update `evals/summary.json` scenario count
+5. Run `tessl tile lint` to verify
+6. Run `tessl eval run` to test
 
 ## Publishing to Tessl Registry
 

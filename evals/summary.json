@@ -1,0 +1,5 @@
+{
+  "tile": "nicholasjackson/terraform-plugin-framework",
+  "description": "Evaluates whether the tile guides agents to produce correct, complete, and idiomatic Terraform providers using terraform-plugin-framework",
+  "scenarios": 5
+}

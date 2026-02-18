@@ -1,0 +1,51 @@
+{
+  "type": "weighted_checklist",
+  "context": "Evaluates whether the agent correctly implements a provider-defined function with proper Definition, Run method, error handling, and tests.",
+  "checklist": [
+    {
+      "name": "Function interface",
+      "description": "The function type implements function.Function interface with Metadata, Definition, and Run methods",
+      "max_score": 10
+    },
+    {
+      "name": "Metadata name",
+      "description": "Metadata method sets resp.Name to parse_id",
+      "max_score": 5
+    },
+    {
+      "name": "Definition parameters",
+      "description": "Definition has a Summary, Description, one StringParameter for the input, and a StringReturn for the result",
+      "max_score": 15
+    },
+    {
+      "name": "Run reads arguments",
+      "description": "Run method reads the input argument using req.Arguments.Get and checks for errors using function.ConcatFuncErrors or direct error check",
+      "max_score": 10
+    },
+    {
+      "name": "Run parsing logic",
+      "description": "Run method splits the input string on colon and returns the name portion (second part) via resp.Result.Set",
+      "max_score": 10
+    },
+    {
+      "name": "Run error handling",
+      "description": "Run method returns a function error (using function.NewArgumentFuncError or function.NewFuncError) when the input format is invalid",
+      "max_score": 15
+    },
+    {
+      "name": "Provider registration",
+      "description": "Provider implements ProviderWithFunctions interface with a Functions method that returns the parse_id function",
+      "max_score": 15
+    },
+    {
+      "name": "Unit test",
+      "description": "A unit test exists that constructs RunRequest with function.NewArgumentsData, calls Run, and asserts the result for both valid and invalid inputs",
+      "max_score": 15
+    },
+    {
+      "name": "Correct imports",
+      "description": "Code imports the function package from terraform-plugin-framework (github.com/hashicorp/terraform-plugin-framework/function)",
+      "max_score": 5
+    }
+  ]
+}

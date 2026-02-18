@@ -6,7 +6,8 @@
   "docs": "docs/index.md",
   "ignore": [
     ".claude/**",
-    ".docs/**"
+    ".docs/**",
+    "test/**"
   ],
   "steering": {
     "diagnostics": {

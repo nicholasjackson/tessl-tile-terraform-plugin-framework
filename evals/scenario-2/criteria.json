@@ -1,0 +1,56 @@
+{
+  "type": "weighted_checklist",
+  "context": "Evaluates whether the agent correctly implements a new Terraform resource with full CRUD operations, proper state management, diagnostics handling, and acceptance tests.",
+  "checklist": [
+    {
+      "name": "Create sets complete state",
+      "description": "Create method calls POST /pet and sets ALL attributes in state from the API response including the server-assigned id. No computed attributes left unknown after apply",
+      "max_score": 15
+    },
+    {
+      "name": "Read handles not-found",
+      "description": "Read method calls GET /pet/{petId} and handles 404/not-found by calling resp.State.RemoveResource(ctx) instead of returning an error. Sets complete state on success",
+      "max_score": 15
+    },
+    {
+      "name": "Update sets complete state",
+      "description": "Update method calls PUT /pet and sets complete state from the response, not just the changed fields",
+      "max_score": 10
+    },
+    {
+      "name": "Delete does not set state",
+      "description": "Delete method calls DELETE /pet/{petId} and does NOT call resp.State.Set. The framework removes state automatically",
+      "max_score": 5
+    },
+    {
+      "name": "Diagnostics checking",
+      "description": "Every Plan.Get, State.Get, Config.Get, and State.Set call is followed by resp.Diagnostics.HasError() check with early return",
+      "max_score": 10
+    },
+    {
+      "name": "Schema correctness",
+      "description": "id is Computed with UseStateForUnknown. name and photo_urls are Required. status is Optional with enum validator. All attributes have Description strings",
+      "max_score": 10
+    },
+    {
+      "name": "Framework types in model",
+      "description": "Resource model struct uses framework types (types.String, types.Int64, types.List) not Go primitives",
+      "max_score": 5
+    },
+    {
+      "name": "Provider registration",
+      "description": "The new resource is registered in provider.go's Resources() method",
+      "max_score": 5
+    },
+    {
+      "name": "API client",
+      "description": "A separate client package or file with CreatePet, GetPet, UpdatePet, DeletePet methods using proper HTTP methods and JSON encoding",
+      "max_score": 10
+    },
+    {
+      "name": "Acceptance test",
+      "description": "Test uses resource.Test with ProtoV6ProviderFactories and CheckDestroy. Has at least a basic create-and-read test step with ComposeAggregateTestCheckFunc assertions. NOT unit tests with mocks",
+      "max_score": 15
+    }
+  ]
+}
