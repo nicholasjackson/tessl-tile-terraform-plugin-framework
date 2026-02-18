@@ -1,3 +1,5 @@
+# Provider Configuration
+
 Add provider-level configuration with environment variable fallback to the HashiCorp scaffold.
 
 ## Setup

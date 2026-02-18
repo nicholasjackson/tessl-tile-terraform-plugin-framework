@@ -1,3 +1,5 @@
+# Provider Function
+
 Add a provider-defined function to the HashiCorp scaffold that parses a composite ID string.
 
 ## Setup

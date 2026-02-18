@@ -1,3 +1,5 @@
+# Resource CRUD with API Client
+
 Add a new Pet resource to the HashiCorp scaffold that manages pets via the Swagger Petstore API.
 
 ## Setup

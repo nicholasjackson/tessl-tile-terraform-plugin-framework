@@ -31,6 +31,34 @@ Unit tests are appropriate for:
 
 Use `testify/require` for assertions (not `assert` -- require stops on failure).
 
+### Provider Function Unit Tests
+
+Provider functions MUST have unit tests that directly call the `Run` method. Construct `function.RunRequest` with `function.NewArgumentsData` and `function.RunResponse` with `function.NewResultData`, then assert the result:
+
+```go
+func TestParseIdFunction_ValidInput(t *testing.T) {
+    f := NewParseIdFunction()
+
+    req := function.RunRequest{
+        Arguments: function.NewArgumentsData([]attr.Value{
+            basetypes.NewStringValue("resource:my-thing"),
+        }),
+    }
+    resp := &function.RunResponse{
+        Result: function.NewResultData(basetypes.StringType{}),
+    }
+
+    f.Run(context.Background(), req, resp)
+
+    require.Nil(t, resp.Error)
+    var result string
+    resp.Result.Get(context.Background(), &result)
+    require.Equal(t, "my-thing", result)
+}
+```
+
+Always test both valid inputs and invalid/error inputs in separate test functions.
+
 ## Style
 
 - Avoid table-driven tests -- write explicit test functions per scenario
