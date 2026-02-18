@@ -35,23 +35,36 @@ if resp.Diagnostics.HasError() {
 }
 ```
 
-## Data Source Not-Found Handling
+## Complete Data Source Read Pattern
 
-Data sources must always return an error when the requested item is not found. Unlike resources (which use `RemoveResource`), a data source that cannot find its item is a hard error:
+A data source Read method must check diagnostics after Config.Get, handle not-found with AddError (not RemoveResource), and check diagnostics after State.Set:
 
 ```go
-// In a data source Read method:
-item, err := client.GetItem(data.Id.ValueString())
-if err != nil {
-    resp.Diagnostics.AddError(
-        "Item Not Found",
-        fmt.Sprintf("Could not find item with ID %s: %s", data.Id.ValueString(), err),
-    )
-    return
+func (d *ExampleDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+    var config ExampleDataSourceModel
+
+    resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+    if resp.Diagnostics.HasError() {
+        return
+    }
+
+    item, err := d.client.GetItem(config.Id.ValueString())
+    if err != nil {
+        resp.Diagnostics.AddError(
+            "Item Not Found",
+            fmt.Sprintf("Could not find item with ID %s: %s", config.Id.ValueString(), err),
+        )
+        return
+    }
+
+    config.Name = types.StringValue(item.Name)
+
+    resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
+    if resp.Diagnostics.HasError() {
+        return
+    }
 }
 ```
-
-Never silently return or leave state empty when a data source lookup fails.
 
 ## Error vs Warning
 
