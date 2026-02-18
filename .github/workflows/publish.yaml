@@ -1,0 +1,27 @@
+name: Publish Tile
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Tessl CLI
+        run: npm install -g @tessl/cli
+
+      - name: Lint tile
+        run: tessl tile lint
+
+      - name: Publish tile
+        run: tessl tile publish
+        env:
+          TESSL_TOKEN: ${{ secrets.TESSL_TOKEN }}
