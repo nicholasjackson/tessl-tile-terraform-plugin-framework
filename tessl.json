@@ -1,0 +1,8 @@
+{
+  "name": "tessl-tile-terraform-plugin-framework",
+  "dependencies": {
+    "nicholasjackson/terraform-plugin-framework": {
+      "version": "0.1.0"
+    }
+  }
+}
